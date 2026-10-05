@@ -83,7 +83,7 @@ A new `<dir>/<name>/` containing the full kit (`RobotFirmware/`, `ControllerFirm
 - Both `platformio.ini` files stamped with `-DNRL_TEAM_NUMBER`, `-DNRL_WIFI_CHANNEL`, and
   `-DNRL_TEAM_NAME` (the team name shows on the robot's status OLED).
 
-Build artifacts and tooling (`.git`, `.pio`, `.vscode`, `.claude`, `tools/`) are **not** copied.
+Build artifacts and tooling (`.git`, `.pio`, `.vscode`, `tools/`) are **not** copied.
 Dependencies download on the first PlatformIO build, exactly like the manual flows.
 
 ## Team number → radio channel

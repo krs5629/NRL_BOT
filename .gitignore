@@ -22,7 +22,7 @@ __pycache__/
 # kitbuilder output (regenerable, not committed)
 dist/
 
-# Claude Code local settings (machine-specific, never commit)
+# Local editor/assistant settings (machine-specific, never commit)
 .claude/settings.local.json
 .claude/
 
