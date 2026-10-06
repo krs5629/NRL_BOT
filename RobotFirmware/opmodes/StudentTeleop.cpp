@@ -1,14 +1,9 @@
 #include "NRL.h"
 
+
 // ============================================================
-// DRIVETRAIN
+// DRIVE MOTORS
 // ============================================================
-//
-// Each software motor represents one entire side of the bot.
-//
-// LEFT SIDE  = 2 physical motors
-// RIGHT SIDE = 2 physical motors
-//
 
 static HexaDCMotor leftMotor({
     .dirPin = MOTOR_L_DIR,
@@ -21,68 +16,44 @@ static HexaDCMotor rightMotor({
     .pwmPin = MOTOR_R_PWM
 });
 
-
-// Differential drivetrain.
 static TankDrive drive(leftMotor, rightMotor);
 
 
 // ============================================================
 // ARM SERVO
 // ============================================================
-//
-// SERVO_1 = GPIO 39 on your NRL board.
-//
-// If your arm servo is physically plugged into SERVO_2,
-// change SERVO_1 below to SERVO_2.
-//
 
 static HexaServo arm({
     .signalPin = SERVO_1,
-
-    // Starting position.
     .startAngle = 90.0f,
-
-    // Conservative software limits.
-    //
-    // These prevent the software from commanding the servo
-    // outside this range.
-    //
-    // IMPORTANT:
-    // The actual safe mechanical range depends on your arm
-    // linkage. These are NOT a guarantee that the mechanism
-    // itself can physically reach both limits.
     .minAngle = 20.0f,
     .maxAngle = 160.0f,
-
-    // No calibration offset initially.
     .offsetDeg = 0.0f,
-
-    // Keep servo powered and holding its position.
     .settleMs = 0
 });
 
-
-// ============================================================
-// ARM SETTINGS
-// ============================================================
-
-// Maximum arm movement speed.
-//
-// 60  = slower / gentler
-// 90  = recommended starting value
-// 120 = faster
-//
 static constexpr float ARM_SPEED_DEG_PER_SEC = 90.0f;
-
-
-// Joystick deadband.
-// Small joystick movements below this are ignored.
 static constexpr float ARM_DEADBAND = 0.08f;
 
-
-// If the physical arm moves DOWN when you push the
-// LEFT joystick UP, change this to true.
+// false = use leftY() direction as-is
+// true  = reverse the leftY() direction
 static constexpr bool ARM_REVERSED = false;
+
+
+// ============================================================
+// CLAW SERVO
+// ============================================================
+
+static HexaServo claw({
+    .signalPin = SERVO_2,
+    .startAngle = 90.0f,
+    .minAngle = 20.0f,
+    .maxAngle = 160.0f,
+    .offsetDeg = 0.0f,
+    .settleMs = 0
+});
+
+static constexpr float CLAW_SPEED_DEG_PER_SEC = 45.0f;
 
 
 // ============================================================
@@ -90,51 +61,46 @@ static constexpr bool ARM_REVERSED = false;
 // ============================================================
 
 class StudentTeleOp : public NRLOpMode {
-public:
 
-    // --------------------------------------------------------
-    // INIT
-    // --------------------------------------------------------
+public:
 
     void init() override {
 
-        // IMPORTANT:
-        // The NRL project generator initializes servos BEFORE
-        // the DC motors. We follow that ordering here.
+        // ----------------------------------------------------
+        // Configure servo ramp rates BEFORE begin().
+        // begin() moves each servo to its startAngle.
+        // ----------------------------------------------------
 
-        arm.begin();
+        arm.setRampRate(ARM_SPEED_DEG_PER_SEC);
+        claw.setRampRate(CLAW_SPEED_DEG_PER_SEC);
+
+        // ----------------------------------------------------
+        // Initialize hardware
+        // ----------------------------------------------------
 
         leftMotor.begin();
         rightMotor.begin();
 
+        arm.begin();
+        claw.begin();
 
-        // Smooth drivetrain acceleration/deceleration.
-        //
-        // 0.1 is the existing setting from your original
-        // StudentTeleop.cpp.
+        // ----------------------------------------------------
+        // Drivetrain smoothing
+        // ----------------------------------------------------
+
         drive.setRampRate(0.1f);
-
-
-        // Smooth arm movement.
-        arm.setRampRate(ARM_SPEED_DEG_PER_SEC);
     }
 
-
-    // --------------------------------------------------------
-    // LOOP
-    // --------------------------------------------------------
 
     void loop() override {
 
         // ====================================================
-        // WHEELS — RIGHT JOYSTICK
+        // WHEELS
+        //
+        // RIGHT JOYSTICK:
+        //   Y = forward / reverse
+        //   X = turning
         // ====================================================
-        //
-        // Right stick UP/DOWN  = forward/reverse
-        // Right stick LEFT/RIGHT = turn
-        //
-        // This is your original drivetrain code.
-        //
 
         drive.drive(
             gamepad1.rightY(),
@@ -143,44 +109,29 @@ public:
 
 
         // ====================================================
-        // ARM — LEFT JOYSTICK
+        // ARM
+        //
+        // LEFT JOYSTICK Y = arm movement
         // ====================================================
-        //
-        // Left stick UP   = arm up
-        // Left stick DOWN = arm down
-        //
-        // The arm is controlled RELATIVELY.
-        //
-        // That means:
-        //
-        // joystick held    -> arm keeps moving
-        // joystick released -> arm stops and holds position
-        //
-        // It does NOT return to 90° when you release the stick.
-        //
-
 
         float armInput = gamepad1.leftY();
 
 
         // ----------------------------------------------------
         // DEADZONE
+        //
+        // Ignore tiny joystick movements around center.
         // ----------------------------------------------------
-        //
-        // Ignore tiny joystick noise around the center.
-        //
 
         if (fabs(armInput) < ARM_DEADBAND) {
+
             armInput = 0.0f;
+
         }
         else {
 
-            // Rescale the input after removing the deadzone.
-            //
-            // This prevents the deadzone from making the arm
-            // feel weak immediately after the stick leaves
-            // the center.
-            //
+            // Rescale the remaining range so that the useful
+            // joystick range still reaches approximately -1 to +1.
 
             if (armInput > 0.0f) {
 
@@ -209,49 +160,58 @@ public:
 
         // ----------------------------------------------------
         // ARM MOVEMENT
+        //
+        // NRL TELEOP loop = 100 Hz.
+        // 90 degrees/sec ÷ 100 = 0.9 degrees/loop.
         // ----------------------------------------------------
-        //
-        // NRL runs the OpMode at approximately 100 Hz.
-        //
-        // Example:
-        //
-        // 90 degrees/sec ÷ 100 loops/sec
-        // = 0.9 degrees per loop at full stick.
-        //
 
         constexpr float LOOP_HZ = 100.0f;
 
-        const float degreesPerLoop =
+        const float armDegreesPerLoop =
             ARM_SPEED_DEG_PER_SEC / LOOP_HZ;
 
-
-        // Move relative to the current servo position.
-        //
-        // HexaServo handles the configured angle limits.
-        //
 
         if (armInput != 0.0f) {
 
             arm.moveBy(
-                armInput * degreesPerLoop
+                armInput * armDegreesPerLoop
+            );
+        }
+
+
+        // ====================================================
+        // CLAW
+        //
+        // RB HELD → CLOSE
+        // LB HELD → OPEN
+        //
+        // Neither held → hold current position
+        // Both held → do nothing
+        // ====================================================
+
+        if (gamepad1.pressed(BTN_RB) &&
+            !gamepad1.pressed(BTN_LB)) {
+
+            // RB = close claw
+            claw.moveBy(
+                CLAW_SPEED_DEG_PER_SEC / LOOP_HZ
+            );
+
+        }
+        else if (gamepad1.pressed(BTN_LB) &&
+                 !gamepad1.pressed(BTN_RB)) {
+
+            // LB = open claw
+            claw.moveBy(
+                -CLAW_SPEED_DEG_PER_SEC / LOOP_HZ
             );
         }
     }
 
 
-    // --------------------------------------------------------
-    // STOP
-    // --------------------------------------------------------
-
     void stop() override {
 
-        // Stop the drivetrain immediately.
         drive.stop();
-
-        // Do NOT command the arm to another angle here.
-        //
-        // The NRL framework handles servo cleanup when the
-        // OpMode stops.
     }
 };
 
@@ -262,7 +222,7 @@ public:
 
 REGISTER_OPMODE(
     StudentTeleOp,
-    "StudentTeleOp",
+    "Student TeleOp",
     TELEOP
 );
 
@@ -655,4 +615,5 @@ RobotFirmware/opmodes/StudentTeleop.cpp
 ```
 
 **One final hardware-specific thing:** this code assumes your arm has **one standard position servo** connected to `SERVO_1`. If your arm actually uses **two servos, a continuous-rotation servo, or a geared motor**, tell me that before flashing because the control code would need to be different
+https://chatgpt.com/share/6ac53681-4430-83ee-8040-586ac5d8de03
 */
