@@ -616,4 +616,5 @@ RobotFirmware/opmodes/StudentTeleop.cpp
 
 **One final hardware-specific thing:** this code assumes your arm has **one standard position servo** connected to `SERVO_1`. If your arm actually uses **two servos, a continuous-rotation servo, or a geared motor**, tell me that before flashing because the control code would need to be different
 https://chatgpt.com/share/6ac53681-4430-83ee-8040-586ac5d8de03
+https://chatgpt.com/share/6ac536e7-7768-83ec-8e7a-9360c0904d26
 */
